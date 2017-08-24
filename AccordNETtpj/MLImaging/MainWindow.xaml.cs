@@ -28,117 +28,245 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using WPFFolderBrowser;
 
 namespace MLImaging
 {
 
     public partial class MainWindow : Window
     {
-        private bool imageLoaded = false;
-        private String imageString = null;
-        private Bitmap cvsbmp = null, old = null;
+        private Bitmap cvsbmp = null;
+        List<BitmapImage> images = new List<BitmapImage>();
+        List<BitmapImage> imagesEdited = new List<BitmapImage>();
+        WPFBitmapConverter converter = new WPFBitmapConverter();
+        string helpText = "Imaging\n" +
+            "Checkbox Folder denotes whether Folder or File dialog should be opened. If it's unchecked, Select All/Current checkbox is disabled, because only one image is selected.\n" +
+            "Face button detects faces on loaded image(s), using basic Haar-like features. Detected faces are cropped and merged, and then displayed next to the corresponding original image.\n" +
+            "Border button detects a border of selected image(s). It should be applied on transparent-background and simple images. Result is a pink line which is being drawn over the copy of loaded image.\n" +
+            "Edge button detects edges on the grayscale version of loaded image. Resulting image is created with filter already applied.\n" +
+            "Cluster button converts loaded image(s) into double array of pixel values between -1 and 1. Values are then clustered using K-means algorithm and a given number of clusters, and pixel values replaced with those of their cluster's centroid.\n" +
+            "Select All/Current checkbox represents whether transformation should be applied to all loaded images or only the one currently displayed. This checkbox is unchecked and disabled if only one image is loaded.\n" +
+            "Save button saves resulting image(s) (depending on whether Select All/Current checkbox is checked) to folder selected through dialog.\n\n" +
+            "ML\n" +
+            "Regression button does regression upon blue and red dots placed on canvas (two regression lines). You need at least one dot of any color.\n" +
+            "Classification separates blue and red dots (you need at leat one dot of each class) using SVM with linear kernel. Outliers are then encircled with the color of the class they 'should be in'. Sigma parameter denotes kernel function's intercept point." +
+            "\nK-means takes in all the dots, and clusters them in a given number of clusters. Colors don't matter.";
+        ushort i = 0;
+        string filters = "All supported graphics|*.jpg;*.jpeg;*.png|" +
+                  "JPEG (*.jpg;*.jpeg)|*.jpg;*.jpeg|" +
+                  "Portable Network Graphic (*.png)|*.png";
+        String[] filtersDir = new String[] { "jpg", "jpeg", "png", "gif", "tiff", "bmp" };
 
         public MainWindow()
         {
             InitializeComponent();
             imageInfo.Text = "";
+
+            leftOriginal.IsEnabled = false;
+            rightOriginal.IsEnabled = false;
+
+            helpTB.Text = helpText;
+            allcurr.IsChecked = false;
+            allcurr.IsEnabled = false;
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            Microsoft.Win32.OpenFileDialog op = new Microsoft.Win32.OpenFileDialog();
-            op.Title = "Select a picture";
-            op.Filter = "All supported graphics|*.jpg;*.jpeg;*.png|" +
-              "JPEG (*.jpg;*.jpeg)|*.jpg;*.jpeg|" +
-              "Portable Network Graphic (*.png)|*.png";
-            if (op.ShowDialog() == true)
+            images = new List<BitmapImage>();
+            imagesEdited = new List<BitmapImage>();
+            i = 0;
+            Boolean dialogOK = true;
+            if (checkBox.IsChecked == true)
             {
-                cvsim.Source = new BitmapImage(new Uri(op.FileName));
+                allcurr.IsChecked = true;
+                allcurr.IsEnabled = true;
+                WPFFolderBrowserDialog dd = new WPFFolderBrowserDialog();
+                dd.Title = "Select a folder";
 
-                cvs.Width = cvsim.Source.Width;
-                cvs.Height = cvsim.Source.Height;
-                imageLoaded = true;
-                imageString = op.FileName;
-                if (cvs.Children.Count > 1)
-                    cvs.Children.RemoveRange(1, cvs.Children.Count);
-                imageInfo.Text = "";
+                if (dd.ShowDialog() == true)
+                {
+                    String[] names = UtilFn.GetFilesFrom(dd.FileName, filtersDir, false);
+                    if (names.Length == 0)
+                        return;
+                    foreach (String fn in names)
+                    {
+                        images.Add(new BitmapImage(new Uri(fn)));
+                        imagesEdited.Add(new BitmapImage(new Uri(fn)));
 
+                    }
+                }
+                else
+                {
+                    dialogOK = false;
+                }
             }
+            else
+            {
+                allcurr.IsChecked = false;
+                allcurr.IsEnabled = false;
+                Microsoft.Win32.OpenFileDialog op = new Microsoft.Win32.OpenFileDialog();
+                op.Title = "Select a picture";
+                op.Filter = filters;
+                if (op.ShowDialog() == true)
+                {
+                    images.Add(new BitmapImage(new Uri(op.FileName)));
+                    imagesEdited.Add(new BitmapImage(new Uri(op.FileName)));
+                }
+                else
+                {
+                    dialogOK = false;
+                }
+            }
+
+            if (!dialogOK)
+            {
+                allcurr.IsChecked = false;
+                allcurr.IsEnabled = false;
+                MessageBox.Show("Dialog fail");
+                return;
+            }
+
+            if (0 == images.Count)
+            {
+                allcurr.IsChecked = false;
+                allcurr.IsEnabled = false;
+                MessageBox.Show("No images");
+                return;
+            }
+
+            cvsim.Source = imagesEdited[i];
+            cvsim2.Source = images[i];
+            if (1 == images.Count)
+                rightOriginal.IsEnabled = false;
+
+            cvs.Width = cvsim.Source.Width;
+            cvs.Height = cvsim.Source.Height;
+            cvs2.Width = cvsim2.Source.Width;
+            cvs2.Height = cvsim2.Source.Height;
+            if (images.Count > 1)
+            {
+                rightOriginal.IsEnabled = true;
+            }
+
+            if (cvs.Children.Count > 1)
+                cvs.Children.RemoveRange(1, cvs.Children.Count);
+            imageInfo.Text = "";
         }
 
         private void Button_Click_1(object sender, RoutedEventArgs e)
         {
-            if (imageLoaded)
+            if (images.Count > 0)
             {
-                var cascade = new Accord.Vision.Detection.Cascades.FaceHaarCascade();
+                imageInfo.Text = "Working on it!";
 
-                var detector = new Accord.Vision.Detection.HaarObjectDetector(cascade, minSize: 50,
-                    searchMode: Accord.Vision.Detection.ObjectDetectorSearchMode.Average);
+                if (allcurr.IsChecked == true)
+                    for (ushort i = 0; i < images.Count; ++i)
+                        faceDetect(i);
+                else
+                    faceDetect(i);
 
-                cvsbmp = UtilFn.getBmpFromCvsim(cvsim);
-                System.Drawing.Rectangle[] rectangles = detector.ProcessFrame(cvsbmp);
-
-                foreach (System.Drawing.Rectangle r in rectangles)
-                {
-                    imageInfo.Text += "Left:" + r.Left + " Top:" + r.Top + " Width:" + r.Width + " Height:" + r.Height + ";\n";
-
-                    System.Windows.Shapes.Rectangle rect;
-                    rect = new System.Windows.Shapes.Rectangle();
-                    rect.Stroke = new SolidColorBrush(Colors.Violet);
-                    rect.StrokeThickness = 5;
-
-                    rect.Width = r.Width;
-                    rect.Height = r.Height;
-                    Canvas.SetLeft(rect, r.Left);
-                    Canvas.SetTop(rect, r.Top);
-                    cvs.Children.Add(rect);
-                }
-                if (rectangles.Count() == 0)
-                    imageInfo.Text = "No faces detected!";
+                cvsim.Source = imagesEdited[i];
+                imageInfo.Text = "Done!";
             }
             else
             {
                 imageInfo.Text = "Image not loaded!";
             }
         }
+        private void faceDetect(ushort j)
+        {
+            cvsbmp = UtilFn.BitmapImage2Bitmap(images[j]);
 
+            var cascade = new Accord.Vision.Detection.Cascades.FaceHaarCascade();
+
+            var detector = new Accord.Vision.Detection.HaarObjectDetector(cascade, minSize: 50,
+                searchMode: Accord.Vision.Detection.ObjectDetectorSearchMode.Average);
+
+
+            System.Drawing.Rectangle[] rectangles = detector.ProcessFrame(cvsbmp);
+            List<Bitmap> listBitmap = new List<Bitmap>();
+            foreach (System.Drawing.Rectangle r in rectangles)
+                listBitmap.Add(UtilFn.CropImage(cvsbmp, r.X, r.Y, r.Width, r.Height));
+
+            if (rectangles.Count() == 0)
+                imageInfo.Text = "No faces detected!";
+            else
+                imagesEdited[j] = (converter.Convert(UtilFn.MergeImages(listBitmap), Type.GetType("BitmapImage"), null, null) as BitmapImage).Clone();
+        }
 
         private void Button_Click_2(object sender, RoutedEventArgs e)
         {
-            if (imageLoaded)
+            imagesEdited = new List<BitmapImage>(images);
+            if (images.Count > 0)
             {
-                cvsbmp = UtilFn.getBmpFromCvsim(cvsim);
+                imageInfo.Text = "Working on it!";
 
-                Grayscale gfilter = new Grayscale(0.2125, 0.7154, 0.0721);
-
-                Bitmap grayImage = gfilter.Apply(cvsbmp);
-
-                BorderFollowing bf = new BorderFollowing();
-
-                List<Accord.IntPoint> contour = bf.FindContour(cvsbmp);
-
-
-                //Bitmap output = new PointsMarker(contour, System.Drawing.Color.Blue,5).Apply(cvsbmp);
-
-                //WPFBitmapConverter converter = new WPFBitmapConverter();
-                //cvsim.Source = converter.Convert(output, Type.GetType("BitmapImage"), null, null) as BitmapImage;
-
-                imageInfo.Text = contour.Count + ": ";
-
-
-                foreach (var c in contour)
+                if (allcurr.IsChecked == true)
+                    for (ushort i = 0; i < images.Count; ++i)
+                    {
+                        cvs.Children.RemoveRange(1, cvs.Children.Count);
+                        cvsim.Source = imagesEdited[i];
+                        borderFollow(i);
+                    }
+                else
                 {
-                    Ellipse dot = new Ellipse();
-                    dot.Width = 4;
-                    dot.Height = 4;
-                    dot.StrokeThickness = 2;
-                    dot.Stroke = System.Windows.Media.Brushes.Violet;
-                    Canvas.SetTop(dot, c.Y - 1);
-                    Canvas.SetLeft(dot, c.X - 1);
-                    imageInfo.Text += "(" + c.X + ", " + c.Y + ");";
-                    cvs.Children.Add(dot);
+                    cvs.Children.RemoveRange(1, cvs.Children.Count);
+                    cvsim.Source = imagesEdited[i];
+                    borderFollow(i);
                 }
+                cvsim.Source = imagesEdited[i];
+                imageInfo.Text = "Done!";
+            }
+            else
+            {
+                imageInfo.Text = "Image not loaded!";
+            }
+        }
+        private void borderFollow(ushort j)
+        {
+           
+            cvsbmp = UtilFn.BitmapImage2Bitmap(images[j]);
+            Bitmap resbmp = UtilFn.ResizeBitmap(cvsbmp, (int)cvsim.Width, (int)(cvsim.Width * images[j].Height / images[j].Width));
+            Grayscale gfilter = new Grayscale(0.2125, 0.7154, 0.0721);
 
+            Bitmap grayImage = gfilter.Apply(cvsbmp);
+
+            BorderFollowing bf = new BorderFollowing();
+
+            List<Accord.IntPoint> contour = bf.FindContour(resbmp);
+
+            imageInfo.Text = contour.Count + ": ";
+            foreach (var c in contour)
+            {
+                Ellipse dot = new Ellipse();
+                dot.Width = 4;
+                dot.Height = 4;
+                dot.StrokeThickness = 2;
+                dot.Stroke = System.Windows.Media.Brushes.Violet;
+                Canvas.SetTop(dot, c.Y - 1 + (int)((cvs.Height - resbmp.Height)/2));
+                Canvas.SetLeft(dot, c.X - 1);
+                imageInfo.Text += "(" + c.X + ", " + c.Y + ");";
+                cvs.Children.Add(dot);
+            }
+
+            imagesEdited[j] = UtilFn.rtbToBitmapImage(UtilFn.ExportToPng(null, cvs)).Clone();
+            cvs.Children.RemoveRange(1, cvs.Children.Count);
+        }
+        private void Button_Click_3(object sender, RoutedEventArgs e)
+        {
+
+            if (images.Count > 0)
+            {
+                imageInfo.Text = "Working on it!";
+
+                if (allcurr.IsChecked == true)
+                    for (ushort i = 0; i < images.Count; ++i)
+                        edgeDetect(i);
+                else
+                    edgeDetect(i);
+
+                cvsim.Source = imagesEdited[i];
+                imageInfo.Text = "Done!";
             }
             else
             {
@@ -146,74 +274,125 @@ namespace MLImaging
             }
         }
 
-        private void Button_Click_3(object sender, RoutedEventArgs e)
+        private void edgeDetect(ushort j)
         {
-            if (imageLoaded)
-            {
-                cvsbmp = UtilFn.getBmpFromCvsim(cvsim);
-                old = cvsbmp;
+            cvsbmp = UtilFn.BitmapImage2Bitmap(images[j]);
 
-                Grayscale gfilter = new Grayscale(0.2125, 0.7154, 0.0721);
+            Grayscale gfilter = new Grayscale(0.2125, 0.7154, 0.0721);
 
-                Bitmap grayImage = gfilter.Apply(cvsbmp);
+            Bitmap grayImage = gfilter.Apply(cvsbmp);
 
-                GaborFilter filter = new GaborFilter();
+            GaborFilter filter = new GaborFilter();
 
-                Bitmap output = filter.Apply(grayImage);
+            Bitmap output = filter.Apply(grayImage);
 
-                WPFBitmapConverter converter = new WPFBitmapConverter();
-                cvsim.Source = converter.Convert(output, Type.GetType("BitmapImage"), null, null) as BitmapImage;
-            }
-            else
-            {
-                imageInfo.Text = "Image not loaded!";
-            }
+            imagesEdited[j] = converter.Convert(output, Type.GetType("BitmapImage"), null, null) as BitmapImage;
         }
         private void button_Click_4(object sender, RoutedEventArgs e)
         {
-            if (imageLoaded)
+            imageInfo.Text = "Working on it!";
+
+            if (images.Count > 0)
             {
-                Bitmap image = UtilFn.getBmpFromCvsim(cvsim);
-                old = image;
-                var imageToArray = new ImageToArray(min: -1, max: +1);
-                var arrayToImage = new ArrayToImage(image.Width, image.Height, min: -1, max: +1);
 
-                double[][] pixels; imageToArray.Convert(image, out pixels);
+                if (allcurr.IsChecked == true)
+                    for (ushort i = 0; i < images.Count; ++i)
+                        cluster(i);
+                else
+                    cluster(i);
 
-                KMeans kmeans = new KMeans(k: 5)
-                {
-                    Distance = new SquareEuclidean(),
-                    Tolerance = 0.05
-                };
+                cvsim.Source = imagesEdited[i];
+                imageInfo.Text = "Done!";
 
-                var clusters = kmeans.Learn(pixels);
-
-                int[] labels = clusters.Decide(pixels);
-
-                double[][] replaced = pixels.Apply((x, i) => clusters.Centroids[labels[i]]);
-
-                Bitmap result; arrayToImage.Convert(replaced, out result);
-
-                WPFBitmapConverter converter = new WPFBitmapConverter();
-                cvsim.Source = converter.Convert(result, Type.GetType("BitmapImage"), null, null) as BitmapImage;
             }
             else
             {
                 imageInfo.Text = "Image not loaded!";
             }
         }
-        private void Button_Click_5(object sender, RoutedEventArgs e)
+
+        private void cluster(ushort j)
         {
-            if (old != null)
+            cvsbmp = UtilFn.BitmapImage2Bitmap(images[j]);
+            var imageToArray = new ImageToArray(min: -1, max: +1);
+            var arrayToImage = new ArrayToImage(cvsbmp.Width, cvsbmp.Height, min: -1, max: +1);
+            int kk;
+
+            double[][] pixels; imageToArray.Convert(cvsbmp, out pixels);
+            try
             {
-                WPFBitmapConverter converter = new WPFBitmapConverter();
-                cvsim.Source = converter.Convert(old, Type.GetType("BitmapImage"), null, null) as BitmapImage;
+                kk = Int16.Parse(kCluster.Text);
             }
-            cvs.Children.RemoveRange(1, cvs.Children.Count - 1);
-            imageInfo.Text = "";
+            catch (Exception e)
+            {
+                return;
+            }
+
+            if (kk < 1)
+                return;
+            KMeans kmeans = new KMeans(k: kk)
+            {
+                Distance = new SquareEuclidean(),
+                Tolerance = 0.05
+            };
+
+            var clusters = kmeans.Learn(pixels);
+
+            int[] labels = clusters.Decide(pixels);
+
+            double[][] replaced = pixels.Apply((x, i) => clusters.Centroids[labels[i]]);
+
+            Bitmap result; arrayToImage.Convert(replaced, out result);
+
+            imagesEdited[j] = converter.Convert(result, Type.GetType("BitmapImage"), null, null) as BitmapImage;
+
         }
 
+        private void rightOriginal_Click(object sender, RoutedEventArgs e)
+        {
 
+            cvsim.Source = imagesEdited[++i];
+            cvsim2.Source = images[i];
+           
+            if (i + 1 == images.Count)
+                rightOriginal.IsEnabled = false;
+            if (i > 0)
+                leftOriginal.IsEnabled = true;
+
+        }
+        private void leftOriginal_Click(object sender, RoutedEventArgs e)
+        {
+            cvsim.Source = imagesEdited[--i];
+            cvsim2.Source = images[i];
+           
+            if (i - 1 == -1)
+                leftOriginal.IsEnabled = false;
+            if (i < images.Count - 1)
+                rightOriginal.IsEnabled = true;
+
+
+        }
+        private void bSave_Click(object sender, RoutedEventArgs e)
+        {
+            WPFFolderBrowserDialog dd = new WPFFolderBrowserDialog();
+            if (dd.ShowDialog() == true)
+            {
+                for (ushort i = 0; i < imagesEdited.Count; ++i)
+                    if (allcurr.IsChecked == true || allcurr.IsChecked == false && i == this.i)
+                    {
+
+                        using (FileStream stream = new FileStream(dd.FileName + "/" + i + ".png", FileMode.Create))
+                        {
+                            PngBitmapEncoder encoder = new PngBitmapEncoder();
+                            encoder.Frames.Add(BitmapFrame.Create(imagesEdited[i]));
+                            encoder.Save(stream);
+                        }
+                    }
+                MessageBox.Show("Done");
+            }
+        }
+
+        
 
 
 
@@ -435,7 +614,7 @@ namespace MLImaging
             if (k < 1)
             {
                 textBlock.Text = "Number of classes must be > 0.";
-                return;          
+                return;
             }
 
             double[][] inputs = new double[nB + nR][];

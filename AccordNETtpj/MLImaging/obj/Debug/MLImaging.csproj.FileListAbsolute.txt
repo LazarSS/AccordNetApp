@@ -100,3 +100,4 @@ C:\Users\Lazar Stojković\Documents\Visual Studio 2017\Projects\AccordNETtpj\MLI
 C:\Users\Lazar Stojković\Documents\Visual Studio 2017\Projects\AccordNETtpj\MLImaging\obj\Debug\MLImaging.csproj.GenerateResource.Cache
 C:\Users\Lazar Stojković\Documents\Visual Studio 2017\Projects\AccordNETtpj\MLImaging\obj\Debug\MLImaging.exe
 C:\Users\Lazar Stojković\Documents\Visual Studio 2017\Projects\AccordNETtpj\MLImaging\obj\Debug\MLImaging.pdb
+C:\Users\Lazar Stojković\Documents\Visual Studio 2017\Projects\AccordNETtpj\MLImaging\bin\Debug\WPFFolderBrowser.dll

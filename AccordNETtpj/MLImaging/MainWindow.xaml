@@ -9,24 +9,26 @@
         >
     <Grid>
         <TabControl>
-            <TabItem Header="Imaging" Margin="0,-2,0,0">
+            <TabItem Header="Imaging">
                 <Grid Background="#FFE5E5E5" Margin="0,10,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="1*" />
                         <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="2*" />
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="3*" />
-                        <RowDefinition Height="1*" />
+                        <RowDefinition Height="0.5*" />
+                        <RowDefinition Height="0.7*" />
+
                     </Grid.RowDefinitions>
-                    <Button Content="Load" Margin="10,10,10,0" VerticalAlignment="Top"  Height="25" Click="Button_Click"/>
+                    <Button Content="Load" Margin="10,10,62.2,0" VerticalAlignment="Top"  Height="25" Click="Button_Click"/>
                     <Button Content="Face"  Margin="10,70,10,0" VerticalAlignment="Top" Height="25" Click="Button_Click_1"/>
                     <Button Content="Border"  Margin="10,130,10,0" VerticalAlignment="Top" Height="25" Click="Button_Click_2" />
                     <Button Content="Edge (Gabor)"  Margin="10,200,10,0" VerticalAlignment="Top" Height="25" Click="Button_Click_3"/>
-                    <Button  Content="Cluster" Margin="10,270,10,0" VerticalAlignment="Top" Height="25" Click="button_Click_4"/>
-                    <Button  Content="Clear" Margin="10,340,10,0" VerticalAlignment="Top" Height="25" Click="Button_Click_5" />
+                    <Button  Content="Cluster" Margin="10,270,62.2,0" VerticalAlignment="Top" Height="25" Click="button_Click_4"/>
 
-                    <TextBlock x:Name = "imageInfo" Grid.Column="1" Grid.Row="1" TextWrapping="Wrap" Text=""/>
+                    <TextBlock x:Name = "imageInfo" Grid.Column="1" Grid.Row="2" TextWrapping="Wrap"/>
 
                     <Viewbox Grid.Column="1" Name="vb" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Margin="10,10,10,10">
                         <Canvas x:Name="cvs" Width="300" Height="400">
@@ -38,6 +40,26 @@
                             </Image>
                         </Canvas>
                     </Viewbox>
+
+                    <Viewbox Grid.Column="2" Name="vb2" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Margin="10,10,10,10">
+                        <Canvas x:Name="cvs2" Width="300" Height="400">
+                            <Image 
+                                Name="cvsim2"
+                                Width="{Binding Path=ActualWidth, ElementName=cvs}" 
+                                Height="{Binding Path=ActualHeight, ElementName=cvs}" 
+                                Stretch="Uniform">
+                            </Image>
+                        </Canvas>
+                    </Viewbox>
+                    <CheckBox x:Name="checkBox" HorizontalAlignment="Left" Margin="172,18,0,0" VerticalAlignment="Top" Height="20">
+                    </CheckBox>
+                    <Label x:Name="label2" Content="Folder" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="129,10,0,0"/>
+                    <Button x:Name="leftOriginal" Content="Prev" Grid.Column="2" HorizontalAlignment="Left" Margin="9.6,10.2,0,0" Grid.Row="1" VerticalAlignment="Top" Width="75" Click="leftOriginal_Click"/>
+                    <Button x:Name="rightOriginal" Content="Next" Grid.Column="2" HorizontalAlignment="Left" Margin="298.6,10.2,0,0" Grid.Row="1" VerticalAlignment="Top" Width="75" Click="rightOriginal_Click"/>
+                    <CheckBox x:Name="allcurr" Content="Select All/Currnet" HorizontalAlignment="Left" Margin="10,10.2,0,0" Grid.Row="1" VerticalAlignment="Top"/>
+                    <Button x:Name="bSave" Content="Save" HorizontalAlignment="Left" Margin="10,39.2,0,0" Grid.Row="1" VerticalAlignment="Top" Width="75" Click="bSave_Click"/>
+                    <Label x:Name="label3" Content="k=" HorizontalAlignment="Left" Margin="134,270,0,0" VerticalAlignment="Top" Width="26"/>
+                    <TextBox x:Name="kCluster" HorizontalAlignment="Left" Height="23" Margin="160,274,0,0" TextWrapping="Wrap" Text="5" VerticalAlignment="Top" Width="31"/>
                 </Grid>
             </TabItem>
 
@@ -65,6 +87,11 @@
                     <Label x:Name="label1" Content="sig=" Grid.Column="1" HorizontalAlignment="Left" Margin="71.8,41,0,0" VerticalAlignment="Top" Width="34"/>
                     <TextBox x:Name="sigmaBox" Grid.Column="1" HorizontalAlignment="Left" Height="19" Margin="105.8,44,0,0" TextWrapping="Wrap" Text="0.5" VerticalAlignment="Top" Width="29"/>
                     <TextBlock x:Name="textBlock" Grid.Column="2" Grid.Row="1" TextWrapping="Wrap" Text=""/>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Help">
+                <Grid Background="#FFE5E5E5">
+                    <TextBlock x:Name="helpTB" TextWrapping="Wrap" Text=""/>
                 </Grid>
             </TabItem>
         </TabControl>
