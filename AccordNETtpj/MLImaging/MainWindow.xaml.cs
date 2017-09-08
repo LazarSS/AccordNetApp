@@ -36,26 +36,36 @@ namespace MLImaging
     public partial class MainWindow : Window
     {
         private Bitmap cvsbmp = null;
+        bool hoverOr = true, hoverRes = false;
         List<BitmapImage> images = new List<BitmapImage>();
         List<BitmapImage> imagesEdited = new List<BitmapImage>();
+        bool[] selected, output;
         WPFBitmapConverter converter = new WPFBitmapConverter();
+        System.Windows.Shapes.Rectangle rectSel, rectSel2;
         string helpText = "Imaging\n" +
             "Checkbox Folder denotes whether Folder or File dialog should be opened. If it's unchecked, Select All/Current checkbox is disabled, because only one image is selected.\n" +
             "Face button detects faces on loaded image(s), using basic Haar-like features. Detected faces are cropped and merged, and then displayed next to the corresponding original image.\n" +
             "Border button detects a border of selected image(s). It should be applied on transparent-background and simple images. Result is a pink line which is being drawn over the copy of loaded image.\n" +
             "Edge button detects edges on the grayscale version of loaded image. Resulting image is created with filter already applied.\n" +
             "Cluster button converts loaded image(s) into double array of pixel values between -1 and 1. Values are then clustered using K-means algorithm and a given number of clusters, and pixel values replaced with those of their cluster's centroid.\n" +
-            "Select All/Current checkbox represents whether transformation should be applied to all loaded images or only the one currently displayed. This checkbox is unchecked and disabled if only one image is loaded.\n" +
-            "Save button saves resulting image(s) (depending on whether Select All/Current checkbox is checked) to folder selected through dialog.\n\n" +
+            "Select All/Free checkbox represents whether transformation should be applied to all loaded images or only the one currently displayed. This checkbox is unchecked and disabled if only one image is loaded. When it comes to resulting images, it is used for labeling during SVM training, when estimating performance of SVM, or selecting results that will later be saved.\n" +
+            "Save button saves resulting image(s) (selected) to folder selected through dialog.\n" +
+            "BoW model is used for feature extraction. It is trained upon raw Bitmaps and is later on able to produce vectors (dimension 20 hardcoded) for new Bitmaps. Those vectors are then used for SVM training.\n" +
+            "SVM is simple Linear-kernel SVM. It is used for binary classification and selected images (resulting) are labeled +1. Its complexity (constant C) is fixed to 70. It hardens the margin (must experiment).\n" +
+            "Predict All makes prediction upon all resulting images (loaded or after transformations) when BoW and SVM models are loaded.\n" +
+            "% Correctnes gives precission and recall values after the prediction. User should first label +1 class images himself.\n" +
+            "HOVER AND KEYS : You can hover over the image (whether resulting or original) and then use keys Left and Right for swapping, and Numpad0 for selection (selection works only on resulting images).\n\n" +
             "ML\n" +
             "Regression button does regression upon blue and red dots placed on canvas (two regression lines). You need at least one dot of any color.\n" +
             "Classification separates blue and red dots (you need at leat one dot of each class) using SVM with linear kernel. Outliers are then encircled with the color of the class they 'should be in'. Sigma parameter denotes kernel function's intercept point." +
             "\nK-means takes in all the dots, and clusters them in a given number of clusters. Colors don't matter.";
-        ushort i = 0;
+        ushort i = 0, j = 0;
         string filters = "All supported graphics|*.jpg;*.jpeg;*.png|" +
                   "JPEG (*.jpg;*.jpeg)|*.jpg;*.jpeg|" +
                   "Portable Network Graphic (*.png)|*.png";
         String[] filtersDir = new String[] { "jpg", "jpeg", "png", "gif", "tiff", "bmp" };
+        BagOfVisualWords bow = null;
+        SupportVectorMachine<Linear> svmIm = null;
 
         public MainWindow()
         {
@@ -64,21 +74,23 @@ namespace MLImaging
 
             leftOriginal.IsEnabled = false;
             rightOriginal.IsEnabled = false;
-
+            leftEdited.IsEnabled = false;
+            rightEdited.IsEnabled = false;
             helpTB.Text = helpText;
             allcurr.IsChecked = false;
             allcurr.IsEnabled = false;
+            btnCorrect.IsEnabled = false;
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
             images = new List<BitmapImage>();
             imagesEdited = new List<BitmapImage>();
-            i = 0;
+            i = 0;j = 0;
             Boolean dialogOK = true;
             if (checkBox.IsChecked == true)
             {
-                allcurr.IsChecked = true;
+                allcurr.IsChecked = false;
                 allcurr.IsEnabled = true;
                 WPFFolderBrowserDialog dd = new WPFFolderBrowserDialog();
                 dd.Title = "Select a folder";
@@ -137,19 +149,48 @@ namespace MLImaging
             cvsim.Source = imagesEdited[i];
             cvsim2.Source = images[i];
             if (1 == images.Count)
+            {
                 rightOriginal.IsEnabled = false;
-
+                rightEdited.IsEnabled = false;
+            }
+            else
+            {
+                rightOriginal.IsEnabled = true;
+                rightEdited.IsEnabled = true;
+            }
             cvs.Width = cvsim.Source.Width;
             cvs.Height = cvsim.Source.Height;
             cvs2.Width = cvsim2.Source.Width;
             cvs2.Height = cvsim2.Source.Height;
-            if (images.Count > 1)
+
+            rectSel = new System.Windows.Shapes.Rectangle
             {
-                rightOriginal.IsEnabled = true;
-            }
+                Stroke = new SolidColorBrush(Colors.Orange),
+                StrokeThickness = 4,
+                Width = cvs.Width,
+                Height = cvs.Height
+            };
+
+            Canvas.SetLeft(rectSel, 0);
+            Canvas.SetTop(rectSel, 0);
+
+            rectSel2 = new System.Windows.Shapes.Rectangle
+            {
+                Stroke = new SolidColorBrush(Colors.LimeGreen),
+                StrokeThickness = 4,
+                Width = cvs.Width - 20,
+                Height = cvs.Height - 20
+            };
+
+            Canvas.SetLeft(rectSel2, 10);
+            Canvas.SetTop(rectSel2, 10);
 
             if (cvs.Children.Count > 1)
                 cvs.Children.RemoveRange(1, cvs.Children.Count);
+
+
+            selected = new bool[imagesEdited.Count];
+            //stavi sve na false
             imageInfo.Text = "";
         }
 
@@ -158,14 +199,19 @@ namespace MLImaging
             if (images.Count > 0)
             {
                 imageInfo.Text = "Working on it!";
-
+                imagesEdited.Clear();
+                this.j = 0;
                 if (allcurr.IsChecked == true)
                     for (ushort i = 0; i < images.Count; ++i)
                         faceDetect(i);
+
                 else
                     faceDetect(i);
 
-                cvsim.Source = imagesEdited[i];
+                selected = new bool[imagesEdited.Count];
+                cvsim.Source = imagesEdited[j];
+                rightEdited.IsEnabled = imagesEdited.Count > 1;
+
                 imageInfo.Text = "Done!";
             }
             else
@@ -191,7 +237,12 @@ namespace MLImaging
             if (rectangles.Count() == 0)
                 imageInfo.Text = "No faces detected!";
             else
-                imagesEdited[j] = (converter.Convert(UtilFn.MergeImages(listBitmap), Type.GetType("BitmapImage"), null, null) as BitmapImage).Clone();
+            {
+
+                //imagesEdited[j] = (converter.Convert(UtilFn.MergeImages(listBitmap), Type.GetType("BitmapImage"), null, null) as BitmapImage).Clone();
+                foreach (var x in listBitmap)
+                    imagesEdited.Add((converter.Convert(x, Type.GetType("BitmapImage"), null, null) as BitmapImage).Clone());
+            }
         }
 
         private void Button_Click_2(object sender, RoutedEventArgs e)
@@ -200,7 +251,8 @@ namespace MLImaging
             if (images.Count > 0)
             {
                 imageInfo.Text = "Working on it!";
-
+                imagesEdited.Clear();
+                this.j = 0;
                 if (allcurr.IsChecked == true)
                     for (ushort i = 0; i < images.Count; ++i)
                     {
@@ -214,7 +266,9 @@ namespace MLImaging
                     cvsim.Source = imagesEdited[i];
                     borderFollow(i);
                 }
-                cvsim.Source = imagesEdited[i];
+                cvsim.Source = imagesEdited[j];
+                rightEdited.IsEnabled = imagesEdited.Count > 1;
+
                 imageInfo.Text = "Done!";
             }
             else
@@ -224,7 +278,7 @@ namespace MLImaging
         }
         private void borderFollow(ushort j)
         {
-           
+
             cvsbmp = UtilFn.BitmapImage2Bitmap(images[j]);
             Bitmap resbmp = UtilFn.ResizeBitmap(cvsbmp, (int)cvsim.Width, (int)(cvsim.Width * images[j].Height / images[j].Width));
             Grayscale gfilter = new Grayscale(0.2125, 0.7154, 0.0721);
@@ -243,13 +297,13 @@ namespace MLImaging
                 dot.Height = 4;
                 dot.StrokeThickness = 2;
                 dot.Stroke = System.Windows.Media.Brushes.Violet;
-                Canvas.SetTop(dot, c.Y - 1 + (int)((cvs.Height - resbmp.Height)/2));
+                Canvas.SetTop(dot, c.Y - 1 + (int)((cvs.Height - resbmp.Height) / 2));
                 Canvas.SetLeft(dot, c.X - 1);
                 imageInfo.Text += "(" + c.X + ", " + c.Y + ");";
                 cvs.Children.Add(dot);
             }
 
-            imagesEdited[j] = UtilFn.rtbToBitmapImage(UtilFn.ExportToPng(null, cvs)).Clone();
+            imagesEdited.Add(UtilFn.rtbToBitmapImage(UtilFn.ExportToPng(null, cvs)).Clone());
             cvs.Children.RemoveRange(1, cvs.Children.Count);
         }
         private void Button_Click_3(object sender, RoutedEventArgs e)
@@ -258,7 +312,8 @@ namespace MLImaging
             if (images.Count > 0)
             {
                 imageInfo.Text = "Working on it!";
-
+                imagesEdited.Clear();
+                this.j = 0;
                 if (allcurr.IsChecked == true)
                     for (ushort i = 0; i < images.Count; ++i)
                         edgeDetect(i);
@@ -266,6 +321,7 @@ namespace MLImaging
                     edgeDetect(i);
 
                 cvsim.Source = imagesEdited[i];
+                rightEdited.IsEnabled = imagesEdited.Count > 1;
                 imageInfo.Text = "Done!";
             }
             else
@@ -286,22 +342,26 @@ namespace MLImaging
 
             Bitmap output = filter.Apply(grayImage);
 
-            imagesEdited[j] = converter.Convert(output, Type.GetType("BitmapImage"), null, null) as BitmapImage;
+            imagesEdited.Add(converter.Convert(output, Type.GetType("BitmapImage"), null, null) as BitmapImage);
         }
         private void button_Click_4(object sender, RoutedEventArgs e)
         {
             imageInfo.Text = "Working on it!";
-
+            imagesEdited.Clear();
+            this.j = 0;
             if (images.Count > 0)
             {
-
+                imagesEdited.Clear();
+                this.j = 0;
                 if (allcurr.IsChecked == true)
                     for (ushort i = 0; i < images.Count; ++i)
                         cluster(i);
                 else
                     cluster(i);
 
-                cvsim.Source = imagesEdited[i];
+                cvsim.Source = imagesEdited[j];
+                rightEdited.IsEnabled = imagesEdited.Count > 1;
+
                 imageInfo.Text = "Done!";
 
             }
@@ -344,16 +404,16 @@ namespace MLImaging
 
             Bitmap result; arrayToImage.Convert(replaced, out result);
 
-            imagesEdited[j] = converter.Convert(result, Type.GetType("BitmapImage"), null, null) as BitmapImage;
+            imagesEdited.Add(converter.Convert(result, Type.GetType("BitmapImage"), null, null) as BitmapImage);
 
         }
 
         private void rightOriginal_Click(object sender, RoutedEventArgs e)
         {
+            if (i < 0 || i > images.Count - 1) return;
 
-            cvsim.Source = imagesEdited[++i];
-            cvsim2.Source = images[i];
-           
+            cvsim2.Source = images[++i];
+
             if (i + 1 == images.Count)
                 rightOriginal.IsEnabled = false;
             if (i > 0)
@@ -362,13 +422,58 @@ namespace MLImaging
         }
         private void leftOriginal_Click(object sender, RoutedEventArgs e)
         {
-            cvsim.Source = imagesEdited[--i];
-            cvsim2.Source = images[i];
-           
+            if (i < 0 || i > images.Count - 1) return;
+
+            cvsim2.Source = images[--i];
+
             if (i - 1 == -1)
                 leftOriginal.IsEnabled = false;
             if (i < images.Count - 1)
                 rightOriginal.IsEnabled = true;
+
+
+        }
+
+        private void rightEdited_Click(object sender, RoutedEventArgs e)
+        {
+            if (j < 0 || j > imagesEdited.Count - 1) return;
+            cvsim.Source = imagesEdited[++j];
+            if (selected[j] && !cvs.Children.Contains(rectSel))
+                cvs.Children.Add(rectSel);
+            else if (!selected[j] && cvs.Children.Contains(rectSel))
+                cvs.Children.Remove(rectSel);
+
+            if (output != null)
+                if (output[j] && !cvs.Children.Contains(rectSel2))
+                    cvs.Children.Add(rectSel2);
+                else if (!output[j] && cvs.Children.Contains(rectSel2))
+                    cvs.Children.Remove(rectSel2);
+
+            if (j + 1 == imagesEdited.Count)
+                rightEdited.IsEnabled = false;
+            if (j > 0)
+                leftEdited.IsEnabled = true;
+
+        }
+        private void leftEdited_Click(object sender, RoutedEventArgs e)
+        {
+            if (j < 0 || j > imagesEdited.Count - 1) return;
+
+            cvsim.Source = imagesEdited[--j];
+            if (selected[j] && !cvs.Children.Contains(rectSel))
+                cvs.Children.Add(rectSel);
+            else if (!selected[j] && cvs.Children.Contains(rectSel))
+                cvs.Children.Remove(rectSel);
+            if (output != null)
+                if (output[j] && !cvs.Children.Contains(rectSel2))
+                    cvs.Children.Add(rectSel2);
+                else if (!output[j] && cvs.Children.Contains(rectSel2))
+                    cvs.Children.Remove(rectSel2);
+
+            if (j - 1 == -1)
+                leftEdited.IsEnabled = false;
+            if (j < images.Count - 1)
+                rightEdited.IsEnabled = true;
 
 
         }
@@ -378,7 +483,7 @@ namespace MLImaging
             if (dd.ShowDialog() == true)
             {
                 for (ushort i = 0; i < imagesEdited.Count; ++i)
-                    if (allcurr.IsChecked == true || allcurr.IsChecked == false && i == this.i)
+                    if (selected[i])
                     {
 
                         using (FileStream stream = new FileStream(dd.FileName + "/" + i + ".png", FileMode.Create))
@@ -391,8 +496,284 @@ namespace MLImaging
                 MessageBox.Show("Done");
             }
         }
+        private void cvsim_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (imagesEdited.Count < 1) return;
+            selected[j] = !selected[j];
+            if (selected[j] && !cvs.Children.Contains(rectSel))
+                cvs.Children.Add(rectSel);
+            else if (!selected[j] && cvs.Children.Contains(rectSel))
+                cvs.Children.Remove(rectSel);
+        }
 
-        
+
+        private void CheckBoxChanged(object sender, RoutedEventArgs e)
+        {
+            for (ushort i = 0; i < imagesEdited.Count; ++i)
+                selected[i] = allcurr.IsChecked.GetValueOrDefault();
+            if (rectSel != null)
+                if (selected[j] && !cvs.Children.Contains(rectSel))
+                    cvs.Children.Add(rectSel);
+                else if (!selected[j] && cvs.Children.Contains(rectSel))
+                    cvs.Children.Remove(rectSel);
+        }
+
+        private void trainBoW(object sender, RoutedEventArgs e)
+        {
+            //train bow
+            imageInfo.Text = "Training BoW";
+
+            WPFFolderBrowserDialog dd = new WPFFolderBrowserDialog();
+            dd.Title = "Select a folder";
+            if (dd.ShowDialog() == true)
+            {
+                String[] names = UtilFn.GetFilesFrom(dd.FileName, filtersDir, false);
+                if (names.Length == 0)
+                    MessageBox.Show("NO IMAGES IN SELECTED FOLDER.");
+
+                ushort c = 0;
+                List<Bitmap> ims = new List<Bitmap>();
+                foreach (String fn in names)
+                {
+                    if (c++ == 2000)
+                    {
+                        break;
+                    }
+
+                    ims.Add(new Bitmap(fn));
+                }
+
+                bow = new BagOfVisualWords(20); // br features
+                bow.Learn(ims.ToArray());
+
+            }
+            else
+            {
+                MessageBox.Show("Something went wrong.");
+            }
+            imageInfo.Text = "Done";
+
+        }
+
+        private void Button_Click_6(object sender, RoutedEventArgs e)
+        {
+            imageInfo.Text = "Loading BoW";
+            Microsoft.Win32.OpenFileDialog op = new Microsoft.Win32.OpenFileDialog();
+            op.Title = "Select a BoW file.";
+            if (op.ShowDialog() == true)
+            {
+                bow = Accord.IO.Serializer.Load<BagOfVisualWords>(op.FileName);
+
+            }
+            else
+            {
+                MessageBox.Show("Something went wrong while loadin BoW!");
+            }
+            imageInfo.Text = "Done";
+
+        }
+
+        private void Button_Click_9(object sender, RoutedEventArgs e)
+        {
+            imageInfo.Text = "Loading BoW";
+            Microsoft.Win32.OpenFileDialog op = new Microsoft.Win32.OpenFileDialog();
+            op.Title = "Select a SVM file.";
+            if (op.ShowDialog() == true)
+            {
+                svmIm = Accord.IO.Serializer.Load<SupportVectorMachine<Linear>>(op.FileName);
+
+            }
+            else
+            {
+                MessageBox.Show("Something went wrong while loadin SVM!");
+            }
+            imageInfo.Text = "Done";
+        }
+
+        private void Button_Click_10(object sender, RoutedEventArgs e)
+        {
+            WPFFolderBrowserDialog dd = new WPFFolderBrowserDialog();
+            dd.Title = "Select a folder";
+            if (dd.ShowDialog() == true)
+            {
+                if (bow != null)
+                    Accord.IO.Serializer.Save<SupportVectorMachine<Linear>>(svmIm, dd.FileName + "/svmModel");
+                else
+                    MessageBox.Show("BoW model does not exist!");
+            }
+            else
+            {
+                MessageBox.Show("Something went wrong.");
+            }
+            imageInfo.Text = "Done";
+        }
+
+        private void vb_MouseEnter(object sender, MouseEventArgs e)
+        {
+            hoverRes = true;
+            hoverOr = false;
+        }
+
+        private void vb2_MouseEnter(object sender, MouseEventArgs e)
+        {
+            hoverRes = false;
+            hoverOr = true;
+        }
+
+        private void vb2_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Left)
+            {
+                if (hoverOr)
+                {
+                    if (leftOriginal.IsEnabled)
+                        leftOriginal_Click(null, null);
+                }
+                else
+                {
+                    if (leftEdited.IsEnabled)
+
+                        leftEdited_Click(null, null);
+                }
+            }
+            else if (e.Key == Key.Right)
+            {
+                if (hoverOr)
+                {
+                    if (rightOriginal.IsEnabled)
+
+                        rightOriginal_Click(null, null);
+                }
+                else
+                {
+                    if (rightEdited.IsEnabled)
+
+                        rightEdited_Click(null, null);
+                }
+            }
+            else if (e.Key == Key.NumPad0)
+            {
+                cvsim_MouseUp(null, null);
+            }
+        }
+
+        private void Button_Click_5(object sender, RoutedEventArgs e)
+        {
+            double both = 0, sel = 0, pred = 0;
+            for (ushort z = 0; z < imagesEdited.Count; ++z)
+            {
+                both += selected[z] && output[z] ? 1 : 0;
+                sel += selected[z] ? 1 : 0;
+                pred += output[z] ? 1 : 0;
+            }
+            imageInfo.Text = "Recall: " + both / sel + "  Precision: " + both / pred;
+
+            btnCorrect.IsEnabled = false;
+        }
+
+        private void PredictImages(object sender, RoutedEventArgs e)
+        {
+            imageInfo.Text = "Predicting";
+
+            if (bow == null)
+            {
+                MessageBox.Show("No BoW model!");
+                return;
+            }
+            if (svmIm == null)
+            {
+                MessageBox.Show("No SVM model!");
+                return;
+            }
+
+            Bitmap[] trainIms = new Bitmap[imagesEdited.Count];
+
+            ushort z = 0;
+            foreach (BitmapImage b in imagesEdited)
+                trainIms[z++] = UtilFn.BitmapImage2Bitmap(b);
+
+            double[][] features = bow.Transform(trainIms);
+
+            output = svmIm.Decide(features);
+            if (output != null)
+                if (output[j] && !cvs.Children.Contains(rectSel2))
+                    cvs.Children.Add(rectSel2);
+                else if (!output[j] && cvs.Children.Contains(rectSel2))
+                    cvs.Children.Remove(rectSel2);
+            imageInfo.Text = "Done";
+            btnCorrect.IsEnabled = true;
+
+        }
+
+        private void Button_Click_7(object sender, RoutedEventArgs e)
+        {
+            WPFFolderBrowserDialog dd = new WPFFolderBrowserDialog();
+            dd.Title = "Select a folder";
+            if (dd.ShowDialog() == true)
+            {
+                if (bow != null)
+                    Accord.IO.Serializer.Save<BagOfVisualWords>(bow, dd.FileName + "/bowModel");
+                else
+                    MessageBox.Show("BoW model does not exist!");
+            }
+            else
+            {
+                MessageBox.Show("Something went wrong.");
+            }
+            imageInfo.Text = "Done";
+        }
+
+        private void trainSVMim(object sender, RoutedEventArgs e)
+        {
+            imageInfo.Text = "Training SVMim!";
+
+            if (bow == null || imagesEdited.Count == 0)
+            {
+                MessageBox.Show("NO TRAINED BoW MODEL or NO IMAGES LOADED");
+                return;
+            }
+            Bitmap[] trainIms = new Bitmap[imagesEdited.Count];
+
+            ushort z = 0;
+            foreach (BitmapImage b in imagesEdited)
+                trainIms[z++] = UtilFn.BitmapImage2Bitmap(b);
+
+            int[] labels = new int[imagesEdited.Count];
+
+            for (z = 0; z < imagesEdited.Count; ++z)
+                labels[z] = selected[z] ? +1 : -1;
+
+            if (bow == null)
+            {
+                MessageBox.Show("NO TRAINED BoW MODEL");
+                return;
+            }
+
+            double[][] features = bow.Transform(trainIms);
+
+            var teacher = new SequentialMinimalOptimization<Linear>()
+            {
+                Complexity = 70 // make a hard margin SVM
+            };
+
+            svmIm = teacher.Learn(features, labels);
+            imageInfo.Text = "Done";
+
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -598,6 +979,7 @@ namespace MLImaging
                 }
             }
         }
+
 
         private void bClus_Click(object sender, RoutedEventArgs e)
         {
