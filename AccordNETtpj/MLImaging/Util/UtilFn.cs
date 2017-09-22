@@ -29,17 +29,6 @@ namespace MLImaging.Util
                 return new Bitmap(bitmap);
             }
         }
-        static public Bitmap getBmpFromCvsim(System.Windows.Controls.Image cvsim)
-        {
-            RenderTargetBitmap rtb = new RenderTargetBitmap((int)cvsim.ActualWidth, (int)cvsim.ActualHeight, 96, 96, PixelFormats.Pbgra32);
-            rtb.Render(cvsim);
-
-            MemoryStream stream = new MemoryStream();
-            BitmapEncoder encoder = new BmpBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(rtb));
-            encoder.Save(stream);
-            return new Bitmap(stream);
-        }
         public static Bitmap CropImage(Bitmap source, int x, int y, int width, int height)
         {
             Rectangle crop = new Rectangle(x, y, width, height);
@@ -51,35 +40,6 @@ namespace MLImaging.Util
             }
             return bmp;
         }
-
-        public static Bitmap MergeImages(IEnumerable<Bitmap> images)
-        {
-            var enumerable = images as IList<Bitmap> ?? images.ToList();
-
-            var width = 0;
-            var height = 0;
-
-            foreach (var image in enumerable)
-            {
-                width += image.Width;
-                height = image.Height > height
-                    ? image.Height
-                    : height;
-            }
-
-            var bitmap = new Bitmap(width, height);
-            using (var g = Graphics.FromImage(bitmap))
-            {
-                var localWidth = 0;
-                foreach (var image in enumerable)
-                {
-                    g.DrawImage(image, localWidth, 0);
-                    localWidth += image.Width;
-                }
-            }
-            return bitmap;
-        }
-
         public static String[] GetFilesFrom(String searchFolder, String[] filters, bool isRecursive)
         {
             List<String> filesFound = new List<String>();
@@ -92,19 +52,14 @@ namespace MLImaging.Util
         }
         public static RenderTargetBitmap ExportToPng(Uri path, Canvas surface)
         {
-            // Save current canvas transform
             Transform transform = surface.LayoutTransform;
-            // reset current transform (in case it is scaled or rotated)
             surface.LayoutTransform = null;
 
-            // Get the size of canvas
             System.Windows.Size size = new System.Windows.Size(surface.Width, surface.Height);
-            // Measure and arrange the surface
-            // VERY IMPORTANT
+
             surface.Measure(size);
             surface.Arrange(new Rect(size));
 
-            // Create a render bitmap and push the surface to it
             RenderTargetBitmap renderBitmap =
               new RenderTargetBitmap(
                 (int)size.Width,
@@ -115,7 +70,7 @@ namespace MLImaging.Util
             renderBitmap.Render(surface);
 
             return renderBitmap;
-           
+
         }
         public static Bitmap ResizeBitmap(Bitmap sourceBMP, int width, int height)
         {
@@ -124,7 +79,6 @@ namespace MLImaging.Util
                 g.DrawImage(sourceBMP, 0, 0, width, height);
             return result;
         }
-
         public static BitmapImage rtbToBitmapImage(RenderTargetBitmap renderTargetBitmap)
         {
             var bitmapImage = new BitmapImage();

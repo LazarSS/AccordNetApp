@@ -82,12 +82,11 @@ namespace MLImaging
             btnCorrect.IsEnabled = false;
         }
 
-        private void Button_Click(object sender, RoutedEventArgs e)
+        private void loadButton(object sender, RoutedEventArgs e)
         {
             images = new List<BitmapImage>();
             imagesEdited = new List<BitmapImage>();
-            i = 0;j = 0;
-            Boolean dialogOK = true;
+            i = 0; j = 0;
             if (checkBox.IsChecked == true)
             {
                 allcurr.IsChecked = false;
@@ -109,7 +108,7 @@ namespace MLImaging
                 }
                 else
                 {
-                    dialogOK = false;
+                    imageInfo.Text = "Something went wrong.";
                 }
             }
             else
@@ -126,16 +125,8 @@ namespace MLImaging
                 }
                 else
                 {
-                    dialogOK = false;
+                    imageInfo.Text = "Something went wrong.";
                 }
-            }
-
-            if (!dialogOK)
-            {
-                allcurr.IsChecked = false;
-                allcurr.IsEnabled = false;
-                MessageBox.Show("Dialog fail");
-                return;
             }
 
             if (0 == images.Count)
@@ -190,11 +181,10 @@ namespace MLImaging
 
 
             selected = new bool[imagesEdited.Count];
-            //stavi sve na false
             imageInfo.Text = "";
         }
 
-        private void Button_Click_1(object sender, RoutedEventArgs e)
+        private void faceDetectButton(object sender, RoutedEventArgs e)
         {
             if (images.Count > 0)
             {
@@ -208,11 +198,19 @@ namespace MLImaging
                 else
                     faceDetect(i);
 
-                selected = new bool[imagesEdited.Count];
-                cvsim.Source = imagesEdited[j];
-                rightEdited.IsEnabled = imagesEdited.Count > 1;
+                if (imagesEdited.Count > 0)
+                {
+                    selected = new bool[imagesEdited.Count];
+                    cvsim.Source = imagesEdited[j];
+                    rightEdited.IsEnabled = imagesEdited.Count > 1;
 
-                imageInfo.Text = "Done!";
+                    imageInfo.Text = "Done!";
+                }
+                else
+                {
+                    imageInfo.Text = "No face detected!";
+
+                }
             }
             else
             {
@@ -238,14 +236,13 @@ namespace MLImaging
                 imageInfo.Text = "No faces detected!";
             else
             {
-
                 //imagesEdited[j] = (converter.Convert(UtilFn.MergeImages(listBitmap), Type.GetType("BitmapImage"), null, null) as BitmapImage).Clone();
                 foreach (var x in listBitmap)
                     imagesEdited.Add((converter.Convert(x, Type.GetType("BitmapImage"), null, null) as BitmapImage).Clone());
             }
         }
 
-        private void Button_Click_2(object sender, RoutedEventArgs e)
+        private void borderDetectButton(object sender, RoutedEventArgs e)
         {
             imagesEdited = new List<BitmapImage>(images);
             if (images.Count > 0)
@@ -256,15 +253,15 @@ namespace MLImaging
                 if (allcurr.IsChecked == true)
                     for (ushort i = 0; i < images.Count; ++i)
                     {
-                        cvs.Children.RemoveRange(1, cvs.Children.Count);
-                        cvsim.Source = imagesEdited[i];
+                        //cvs.Children.RemoveRange(1, cvs.Children.Count);
                         borderFollow(i);
+                        //cvsim.Source = imagesEdited[i];
                     }
                 else
                 {
                     cvs.Children.RemoveRange(1, cvs.Children.Count);
-                    cvsim.Source = imagesEdited[i];
                     borderFollow(i);
+                    cvsim.Source = imagesEdited[i];
                 }
                 cvsim.Source = imagesEdited[j];
                 rightEdited.IsEnabled = imagesEdited.Count > 1;
@@ -278,6 +275,7 @@ namespace MLImaging
         }
         private void borderFollow(ushort j)
         {
+            cvsim.Source = images[j];
 
             cvsbmp = UtilFn.BitmapImage2Bitmap(images[j]);
             Bitmap resbmp = UtilFn.ResizeBitmap(cvsbmp, (int)cvsim.Width, (int)(cvsim.Width * images[j].Height / images[j].Width));
@@ -306,7 +304,7 @@ namespace MLImaging
             imagesEdited.Add(UtilFn.rtbToBitmapImage(UtilFn.ExportToPng(null, cvs)).Clone());
             cvs.Children.RemoveRange(1, cvs.Children.Count);
         }
-        private void Button_Click_3(object sender, RoutedEventArgs e)
+        private void edgeDetectButton(object sender, RoutedEventArgs e)
         {
 
             if (images.Count > 0)
@@ -344,7 +342,7 @@ namespace MLImaging
 
             imagesEdited.Add(converter.Convert(output, Type.GetType("BitmapImage"), null, null) as BitmapImage);
         }
-        private void button_Click_4(object sender, RoutedEventArgs e)
+        private void imageClusterButton(object sender, RoutedEventArgs e)
         {
             imageInfo.Text = "Working on it!";
             imagesEdited.Clear();
@@ -383,7 +381,7 @@ namespace MLImaging
             {
                 kk = Int16.Parse(kCluster.Text);
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 return;
             }
@@ -555,7 +553,7 @@ namespace MLImaging
 
         }
 
-        private void Button_Click_6(object sender, RoutedEventArgs e)
+        private void loadBow(object sender, RoutedEventArgs e)
         {
             imageInfo.Text = "Loading BoW";
             Microsoft.Win32.OpenFileDialog op = new Microsoft.Win32.OpenFileDialog();
@@ -573,7 +571,7 @@ namespace MLImaging
 
         }
 
-        private void Button_Click_9(object sender, RoutedEventArgs e)
+        private void loadSVMim(object sender, RoutedEventArgs e)
         {
             imageInfo.Text = "Loading BoW";
             Microsoft.Win32.OpenFileDialog op = new Microsoft.Win32.OpenFileDialog();
@@ -590,7 +588,7 @@ namespace MLImaging
             imageInfo.Text = "Done";
         }
 
-        private void Button_Click_10(object sender, RoutedEventArgs e)
+        private void saveSVMim(object sender, RoutedEventArgs e)
         {
             WPFFolderBrowserDialog dd = new WPFFolderBrowserDialog();
             dd.Title = "Select a folder";
@@ -657,7 +655,7 @@ namespace MLImaging
             }
         }
 
-        private void Button_Click_5(object sender, RoutedEventArgs e)
+        private void calculateAccuracy(object sender, RoutedEventArgs e)
         {
             double both = 0, sel = 0, pred = 0;
             for (ushort z = 0; z < imagesEdited.Count; ++z)
@@ -705,7 +703,7 @@ namespace MLImaging
 
         }
 
-        private void Button_Click_7(object sender, RoutedEventArgs e)
+        private void saveBow(object sender, RoutedEventArgs e)
         {
             WPFFolderBrowserDialog dd = new WPFFolderBrowserDialog();
             dd.Title = "Select a folder";
@@ -753,7 +751,7 @@ namespace MLImaging
 
             var teacher = new SequentialMinimalOptimization<Linear>()
             {
-                Complexity = 70 // make a hard margin SVM
+                Complexity = 70 // margin hardness
             };
 
             svmIm = teacher.Learn(features, labels);
@@ -1054,7 +1052,6 @@ namespace MLImaging
                 cvsML.Children.Add(circle);
             }
         }
-
 
     }
 }
